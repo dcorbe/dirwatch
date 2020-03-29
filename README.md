@@ -1,9 +1,11 @@
 # Usage:
 
-Usage: dirwatch [-d] <directory> <commandline> &nbsp;
-Where <directory> is the directory you want to watch &nbsp;
-and <commandline> is the command line you want to call on change &nbsp;
+Usage: dirwatch [-d] <directory> <commandline>
 
-Be sure to enclose <commandline> in quotes to feed in arguments &nbsp;
+Where <directory> is the directory you want to watch 
 
-Example: dirwatch /tank/u80/www "/usr/bin/env python3 rsync.py" &nbsp;
+and <commandline> is the command line you want to call on change 
+
+Be sure to enclose <commandline> in quotes to feed in arguments 
+
+Example: dirwatch /tank/u80/www "/usr/bin/env python3 rsync.py" 
