@@ -1,6 +1,6 @@
 # Usage:
 
-Usage: %s [-d] <directory> <commandline>\n
+Usage: dirwatch [-d] <directory> <commandline>\n
 Where <directory> is the directory you want to watch\
 and <commandline> is the command line you want to call on change
 
