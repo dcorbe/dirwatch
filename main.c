@@ -50,6 +50,7 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
             dirinfo = tailscan(dirinfo->path, dirinfo);
         }
     }
+    closedir(dir);
     return (dirinfo);
 }
 
