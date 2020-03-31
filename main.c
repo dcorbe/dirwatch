@@ -12,12 +12,27 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <syslog.h>
+#include <popt.h>
 
 #define LOG(...) if (forkme) { syslog(__VA_ARGS__); } else { printf(__VA_ARGS__); }
-#define SPAWN() if (forkme) { system(argv[3]); } else { system(argv[2]); }
 
-int forkme = 0;
+/* Command-line options and their defaults */
+int forkme = 0;                       // -d (daemonize)
+char *pwd;                            // Top-most directory to watch (parent working directory)
+char *cmdline;                        // The command to run when changes to the system are detected
 
+const struct poptOption optionsTable[] = {
+        { "daemon", 'd', POPT_ARG_NONE, NULL, 'd',
+          "Fork into the background", "d" },
+        { "command", 'c', POPT_ARG_STRING, NULL, 'c',
+          "Command to run when changes occur in watched directory", NULL },
+        {"directory", 'w', POPT_ARG_STRING, NULL, 'w',
+         "Directory and subdirectories to watch for changes", NULL },
+        POPT_AUTOHELP
+        { NULL }
+};
+
+/* Contains information about the directories we're watching */
 struct dirinfo {
     int f;       // File descriptor
     char path[PATH_MAX];
@@ -158,17 +173,38 @@ int main (int argc, const char *argv[])
     struct dirinfo *dirinfoptr;
     int i;
 
-    // Check for command line options
-    if (argc <= 2) {
+    poptContext optCon;
+    char c;
+
+    // Parse command line options
+    optCon = poptGetContext(NULL, argc, argv, optionsTable, 0);
+    if (argc < 2)
+    {
         goto usage;
     }
-    if ((strncmp(argv[1], "-d", strlen(argv[1]))) == 0)
+    while ((c = poptGetNextOpt(optCon)) >= 0)
     {
-        if (argc <= 3)
-            goto usage;
-        forkme = 1;
-        daemonize();
+        switch (c)
+        {
+            case 'd':
+                forkme = 1;
+                break;
+            case 'c':
+                cmdline = poptGetOptArg(optCon);
+                break;
+            case 'w':
+                pwd = poptGetOptArg(optCon);
+                break;
+            default:
+                goto usage;
+        }
     }
+    if (!(cmdline))
+        goto usage;
+    if (!(pwd))
+        goto usage;
+    if (forkme)
+        daemonize();
 
     // Warm up kqueue
     kq = kqueue();
@@ -178,7 +214,7 @@ int main (int argc, const char *argv[])
 rescan:
     // Scan directories and load event loop
     n=0;
-    directories = dirscan(argv[1]);
+    directories = dirscan(pwd);
     for (dirinfoptr = directories; dirinfoptr; dirinfoptr = dirinfoptr->next)
     {
         EV_SET(&change[n++], dirinfoptr->f, EVFILT_VNODE,
@@ -215,7 +251,7 @@ rescan:
                 switch(event[i].fflags) {
                     case NOTE_DELETE:
                         printf("%s\n", dirinfoptr->path); // File deleted
-                        if ((strncasecmp(dirinfoptr->path, argv[1], PATH_MAX)) == 0)
+                        if ((strncasecmp(dirinfoptr->path, pwd, PATH_MAX)) == 0)
                         {
                             // Our working directory just vanished
                             goto error;
@@ -223,7 +259,7 @@ rescan:
                         break;
                     default:
                         dirflush(directories);
-                        SPAWN();
+                        system(cmdline);
                         goto rescan;
                 }
             }
@@ -238,9 +274,6 @@ error:
     return EXIT_FAILURE;
 
 usage:
-    fprintf(stderr, "Usage: %s [-d] <directory> <commandline>\n", argv[0]);
-    fprintf(stderr, "Where <directory> is the directory you want to watch\n");
-    fprintf(stderr, "and <commandline> is the command line you want to call on change\n");
-    fprintf(stderr, "\nBe sure to enclose <commandline> in quotes to feed in arguments\n");
+    poptPrintUsage(optCon, stderr, 0);
     return EXIT_FAILURE;
 }
