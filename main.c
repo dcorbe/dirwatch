@@ -331,6 +331,7 @@ eventloop:
                     default:
                         dirflush(directories);
                         changes++;
+                        timer_reset(idletimer, NULL);
                         goto rescan;
                 }
             }
