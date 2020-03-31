@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include <syslog.h>
 #include <popt.h>
+#include <time.h>
+#include "timer.h"
 
 #define LOG(...) if (forkme) { syslog(LOG_INFO, __VA_ARGS__); } else { printf(__VA_ARGS__); }
 
@@ -20,14 +22,25 @@
 int forkme = 0;                       // -d (daemonize)
 char *pwd;                            // Top-most directory to watch (parent working directory)
 char *cmdline;                        // The command to run when changes to the system are detected
+int idletime = 30;                   // Number of seconds the filesystem must be idle for before call to cmdline
+int maxtime = 600;                    // Max number of seconds to wait for the FS to be idle
 
 const struct poptOption optionsTable[] = {
         { "daemon", 'd', POPT_ARG_NONE, NULL, 'd',
-          "Fork into the background", "d" },
+          "Fork into the background",
+          NULL },
         { "command", 'c', POPT_ARG_STRING, NULL, 'c',
-          "Command to run when changes occur in watched directory", NULL },
+          "Command to run when changes occur in watched directory",
+          NULL },
         {"directory", 'w', POPT_ARG_STRING, NULL, 'w',
-         "Directory and subdirectories to watch for changes", NULL },
+         "Directory and subdirectories to watch for changes",
+         NULL },
+        {"idle", 'i', POPT_ARG_INT, &idletime, 'i',
+         "Filesystem must be idle for <seconds> before cmdline is called (default 30 seconds)",
+         NULL},
+        {"maxidle", 't', POPT_ARG_INT, &maxtime, 't',
+         "On a busy system, you want to cap the idle timer so cmdline runs more often (default 10 minutes)",
+         NULL},
         POPT_AUTOHELP
         { NULL }
 };
@@ -172,6 +185,15 @@ int main (int argc, const char *argv[])
     struct dirinfo *directories;
     struct dirinfo *dirinfoptr;
     int i;
+    int changes = 0;
+
+    struct timespec timer;
+    struct timespec time;
+    struct timer *timers;
+    struct timer *idletimer;
+    struct timer *maxtimer;
+    struct timer *timerptr;
+    struct timespec next;
 
     poptContext optCon;
     char c;
@@ -211,6 +233,18 @@ int main (int argc, const char *argv[])
     if (kq < 0)
         perror("kqueue");
 
+    // Set default scan timers
+    clock_gettime(CLOCK_REALTIME, &time);
+    timers = timer_init();
+
+    timer.tv_sec = idletime;
+    timer.tv_nsec = 0;
+    idletimer = timer_set(timers, NULL, &timer);
+
+    timer.tv_sec = maxtime;
+    timer.tv_nsec = 0;
+    maxtimer = timer_set(timers, NULL, &timer);
+
 rescan:
     // Scan directories and load event loop
     n=0;
@@ -223,13 +257,36 @@ rescan:
                0, 0);
     }
 
+eventloop:
     // Loop until an unrecoverable error occurs.
     while (1) {
-        nev = kevent(kq, change, n, event, n, NULL);
+        timerptr = get_next_offset(timers, NULL, &next);
+        nev = kevent(kq, change, n, event, n, &next);
         if (nev == -1) {
+            // kevent returned an error
             perror("kevent");
         }
-        else if (nev > 0) {
+        // Check to see if any timers expired
+        while ((timerptr = get_expired_timer(timers, NULL)))
+        {
+            if (timerptr == maxtimer)
+            {
+                // We've reached our max idle timer.  Reset and process change requests
+                timer_reset(maxtimer, NULL);
+                changes = 0;
+                system(cmdline);
+            }
+            else if (timerptr == idletimer) {
+                // We've hit our idle timer without any further disk writes.  Reset and process change requests
+                timer_reset(idletimer, NULL);
+                if (changes > 0) {
+                    changes = 0;
+                    system(cmdline);
+                }
+            }
+        }
+        if (nev > 0) {
+            // We have changes to process
             for (i = 0; i < nev; i++) {
                 dirinfoptr = searchfd(event[i].ident, directories);
 
@@ -258,7 +315,7 @@ rescan:
                         }
                     default:
                         dirflush(directories);
-                        system(cmdline);
+                        changes++;
                         goto rescan;
                 }
             }
