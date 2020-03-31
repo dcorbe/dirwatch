@@ -14,7 +14,7 @@
 #include <syslog.h>
 #include <popt.h>
 
-#define LOG(...) if (forkme) { syslog(__VA_ARGS__); } else { printf(__VA_ARGS__); }
+#define LOG(...) if (forkme) { syslog(LOG_INFO, __VA_ARGS__); } else { printf(__VA_ARGS__); }
 
 /* Command-line options and their defaults */
 int forkme = 0;                       // -d (daemonize)
