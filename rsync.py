@@ -53,5 +53,5 @@ if __name__ == "__main__":
     for site in sites:
         cmd = '/usr/bin/env rsync -avP --delete /tank/u80/www root@{0}:/var'.format(site['ipv4'])
         print(cmd)
-        # os.system(cmd)
+        os.system(cmd)
 
