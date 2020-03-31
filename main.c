@@ -58,6 +58,11 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
     struct dirent *entry;
 
     dir = opendir(directory);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        exit(EXIT_FAILURE);
+    }
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_type == DT_DIR) {
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
@@ -127,6 +132,8 @@ struct dirinfo *dirflush(struct dirinfo *dirinfo)
 
     for (; dirinfoptr; dirinfoptr = dirinfoptr->prev)
     {
+        // Always make sure to close to avoid leaking FDs 
+        close(dirinfoptr->f);
         if (dirinfoptr->next)
             free(dirinfoptr->next);
     }
