@@ -256,7 +256,6 @@ rescan:
                             // Our working directory just vanished
                             goto error;
                         }
-                        break;
                     default:
                         dirflush(directories);
                         system(cmdline);
