@@ -118,12 +118,20 @@ struct dirinfo *searchfd(int fd, struct dirinfo *dirinfo)
 }
 
 // This flushes a dirinfo struct of all data so the parent directory can be rescanned
-struct dirinfo *dirflush(struct dirinfo *root_p)
+struct dirinfo *dirflush(struct dirinfo *dirinfo)
 {
-    struct dirinfo *iter_p, *save_p = NULL;
+    struct dirinfo *dirinfoptr;
 
-    for (iter_p = root_p; iter_p != NULL; save_p = save_p != NULL ? save_p->next : iter_p->next, iter_p = save_p)
-            free(iter_p);
+    // Always free in reverse
+    for (dirinfoptr = dirinfo; dirinfoptr->next; dirinfoptr = dirinfoptr->next);
+
+    for (; dirinfoptr; dirinfoptr = dirinfoptr->prev)
+    {
+        if (dirinfoptr->next)
+            free(dirinfoptr->next);
+    }
+    if (dirinfo)
+        free(dirinfo);
 
     return(NULL);
 }
