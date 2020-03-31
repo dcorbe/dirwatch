@@ -115,7 +115,7 @@ struct dirinfo *dirflush(struct dirinfo *root_p)
     return(NULL);
 }
 
-static void daemonize()
+void daemonize()
 {
     pid_t pid;
     int i;
