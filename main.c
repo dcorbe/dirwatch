@@ -18,6 +18,8 @@
 
 #define LOG(...) if (forkme) { syslog(LOG_INFO, __VA_ARGS__); } else { printf(__VA_ARGS__); }
 
+#define MAX_OPEN_FILES 65535
+
 /* Command-line options and their defaults */
 int forkme = 0;                       // -d (daemonize)
 char *pwd;                            // Top-most directory to watch (parent working directory)
@@ -64,24 +66,23 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
         exit(EXIT_FAILURE);
     }
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR) {
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                continue;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
 
-            dirinfo->next = malloc(sizeof(struct dirinfo));
-            dirinfo->next->prev = dirinfo;
-            dirinfo->next->next = NULL;
-            dirinfo = dirinfo->next;
+        dirinfo->next = malloc(sizeof(struct dirinfo));
+        dirinfo->next->prev = dirinfo;
+        dirinfo->next->next = NULL;
+        dirinfo = dirinfo->next;
 
-            snprintf(dirinfo->path, PATH_MAX, "%s/%s", directory, entry->d_name);
+        snprintf(dirinfo->path, PATH_MAX, "%s/%s", directory, entry->d_name);
 
-            dirinfo->f = open(dirinfo->path, O_RDONLY);
-            if (dirinfo->f < 0) {
-                fprintf(stderr, "Error: could not open path: %s\n", dirinfo->path);
-                exit(0);
-            }
-            dirinfo = tailscan(dirinfo->path, dirinfo);
+        dirinfo->f = open(dirinfo->path, O_RDONLY);
+        if (dirinfo->f < 0) {
+            // TODO: Log an error here.
+            continue;
         }
+        if (entry->d_type == DT_DIR)
+            dirinfo = tailscan(dirinfo->path, dirinfo);
     }
     closedir(dir);
     return (dirinfo);
@@ -189,12 +190,21 @@ void daemonize()
     openlog("dirwatch", LOG_PID, LOG_DAEMON);
 }
 
+void setlimits()
+{
+    struct rlimit limits;
+
+    limits.rlim_max = MAX_OPEN_FILES;
+    limits.rlim_cur = MAX_OPEN_FILES;
+    setrlimit(RLIMIT_NOFILE, &limits);
+}
+
 int main (int argc, const char *argv[])
 {
     // TODO We have to ask the OS what the current limit is on open files.
     int f, kq, nev;
-    struct kevent change[1024];
-    struct kevent event[1024];
+    struct kevent change[MAX_OPEN_FILES];
+    struct kevent event[MAX_OPEN_FILES];
     int n;
 
     struct dirinfo *directories;
@@ -259,6 +269,9 @@ int main (int argc, const char *argv[])
     timer.tv_sec = maxtime;
     timer.tv_nsec = 0;
     maxtimer = timer_set(timers, NULL, &timer);
+
+    // Set system resources to ensure we have enough available FDs to work with
+    setlimits();
 
 rescan:
     // Scan directories and load event loop
