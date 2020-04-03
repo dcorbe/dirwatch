@@ -16,7 +16,7 @@
 #include <time.h>
 #include "timer.h"
 
-#define LOG(...) if (forkme) { syslog(LOG_INFO, __VA_ARGS__); } else { printf(__VA_ARGS__); }
+#define LOG(X, ...) if (forkme) { syslog(X, __VA_ARGS__); } else { printf(__VA_ARGS__); }
 
 #define MAX_OPEN_FILES 65535
 
@@ -97,7 +97,7 @@ struct dirinfo *dirscan(const char *path)
     f = open(path, O_RDONLY);
     if (f < 0)
     {
-        fprintf(stderr, "Error: could not open path: %s\n", path);
+        LOG(LOG_ERR, "Error: could not open path: %s\n", path);
         exit(0);
     }
     dirinfo = malloc(sizeof(struct dirinfo));
@@ -332,10 +332,9 @@ eventloop:
                 if (!(dirinfoptr))
                     continue;
 
-                LOG("%s\n", dirinfoptr->path);
+                LOG(LOG_INFO, "%s\n", dirinfoptr->path);
                 switch(event[i].fflags) {
                     case NOTE_DELETE:
-                        printf("%s\n", dirinfoptr->path); // File deleted
                         if ((strncasecmp(dirinfoptr->path, pwd, PATH_MAX)) == 0)
                         {
                             // Our working directory just vanished
@@ -355,7 +354,7 @@ success:
     return EXIT_SUCCESS;
 
 error:
-    fprintf(stderr, "Working directory vanished");
+    LOG(LOG_ERR, "Working directory vanished");
     return EXIT_FAILURE;
 
 usage:
