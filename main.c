@@ -14,6 +14,7 @@
 #include <syslog.h>
 #include <popt.h>
 #include <time.h>
+#include <errno.h>
 #include "timer.h"
 
 #define LOG(X, ...) if (forkme) { syslog(X, __VA_ARGS__); } else { printf(__VA_ARGS__); }
@@ -65,7 +66,7 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo)
     dir = opendir(directory);
     if (dir == NULL)
     {
-        perror("opendir");
+        LOG(LOG_ERR, "opendir: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
     while ((entry = readdir(dir)) != NULL)
@@ -84,6 +85,7 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo)
         if (dirinfo->f < 0)
         {
             /* TODO: Log an error here. */
+            LOG(LOG_WARNING, "Warning: could not open file or directory: %s\n", directory);
             continue;
         }
         if (entry->d_type == DT_DIR)
@@ -261,7 +263,10 @@ int main (int argc, const char *argv[])
     /* Warm up kqueue */
     kq = kqueue();
     if (kq < 0)
-        perror("kqueue");
+    {
+        LOG(LOG_ERR, "kqueue: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     /* Set default scan timers */
     clock_gettime(CLOCK_REALTIME, &time);
@@ -299,7 +304,8 @@ eventloop:
         if (nev == -1)
         {
             /* kevent returned an error */
-            perror("kevent");
+            LOG(LOG_ERR, "kevent: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
         }
         /* Check to see if any timers expired */
         while ((timerptr = get_expired_timer(timers, NULL)))
@@ -350,7 +356,8 @@ eventloop:
                         if ((strncasecmp(dirinfoptr->path, pwd, PATH_MAX)) == 0)
                         {
                             /* Our working directory just vanished */
-                            goto error;
+                            LOG(LOG_ERR, "Working directory vanished\n");
+                            return EXIT_FAILURE;
                         }
                     default:
                         dirflush(directories);
@@ -364,10 +371,6 @@ eventloop:
 
 success:
     return EXIT_SUCCESS;
-
-error:
-    LOG(LOG_ERR, "Working directory vanished");
-    return EXIT_FAILURE;
 
 usage:
     poptPrintUsage(optCon, stderr, 0);
