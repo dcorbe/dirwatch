@@ -84,7 +84,6 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo)
         dirinfo->f = open(dirinfo->path, O_RDONLY);
         if (dirinfo->f < 0)
         {
-            /* TODO: Log an error here. */
             LOG(LOG_WARNING, "Warning: could not open file or directory: %s\n", directory);
             continue;
         }
