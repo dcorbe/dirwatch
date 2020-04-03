@@ -9,7 +9,7 @@ struct timer *timer_init(void)
 {
     struct timer *t;
 
-    t = (struct timer *)malloc(sizeof(struct timer));
+    t = malloc(sizeof(struct timer));
     t->next = NULL;
     t->prev = NULL;
     t->interval.tv_sec = 0;
@@ -46,7 +46,7 @@ struct timer *timer_set(struct timer *timers, struct timespec *ctime,
     if (tptr->interval.tv_sec != 0 ||
         tptr->interval.tv_nsec != 0)
     {
-        tptr->next = (struct timer *)malloc(sizeof(struct timer));
+        tptr->next = malloc(sizeof(struct timer));
         tptr->next->prev = tptr;
         tptr->next->next = NULL;
         tptr = tptr->next;
