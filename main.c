@@ -21,13 +21,14 @@
 #define MAX_OPEN_FILES 65535
 
 /* Command-line options and their defaults */
-int forkme = 0;                       // -d (daemonize)
-char *pwd;                            // Top-most directory to watch (parent working directory)
-char *cmdline;                        // The command to run when changes to the system are detected
-int idletime = 30;                   // Number of seconds the filesystem must be idle for before call to cmdline
-int maxtime = 600;                    // Max number of seconds to wait for the FS to be idle
+int forkme = 0;                       /* -d (daemonize) */
+char *pwd;                            /* Top-most directory to watch (parent working directory) */
+char *cmdline;                        /* The command to run when changes to the system are detected */
+int idletime = 30;                    /* Number of seconds the filesystem must be idle for before call to cmdline */
+int maxtime = 600;                    /* Max number of seconds to wait for the FS to be idle */
 
-const struct poptOption optionsTable[] = {
+const struct poptOption optionsTable[] =
+{
         { "daemon", 'd', POPT_ARG_NONE, NULL, 'd',
           "Fork into the background",
           NULL },
@@ -48,14 +49,16 @@ const struct poptOption optionsTable[] = {
 };
 
 /* Contains information about the directories we're watching */
-struct dirinfo {
-    int f;       // File descriptor
-    char path[PATH_MAX];
-    struct dirinfo *prev, *next;
+struct dirinfo
+{
+    int f;                          /* File descriptor */
+    char path[PATH_MAX];            /* Path to file */
+    struct dirinfo *prev, *next;    /* next, prev entries in linked list */
 };
 
-struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
-    // Open and watch all subdirectories
+struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo)
+{
+    /* Open and watch all subdirectories */
     DIR *dir;
     struct dirent *entry;
 
@@ -65,7 +68,8 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
         perror("opendir");
         exit(EXIT_FAILURE);
     }
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir)) != NULL)
+    {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
@@ -77,8 +81,9 @@ struct dirinfo *tailscan(const char *directory, struct dirinfo *dirinfo) {
         snprintf(dirinfo->path, PATH_MAX, "%s/%s", directory, entry->d_name);
 
         dirinfo->f = open(dirinfo->path, O_RDONLY);
-        if (dirinfo->f < 0) {
-            // TODO: Log an error here.
+        if (dirinfo->f < 0)
+        {
+            /* TODO: Log an error here. */
             continue;
         }
         if (entry->d_type == DT_DIR)
@@ -123,17 +128,17 @@ struct dirinfo *searchfd(int fd, struct dirinfo *dirinfo)
     return NULL;
 }
 
-// This flushes a dirinfo struct of all data so the parent directory can be rescanned
+/* This flushes a dirinfo struct of all data so the parent directory can be rescanned */
 struct dirinfo *dirflush(struct dirinfo *dirinfo)
 {
     struct dirinfo *dirinfoptr;
 
-    // Always free in reverse
+    /* Always free in reverse */
     for (dirinfoptr = dirinfo; dirinfoptr->next; dirinfoptr = dirinfoptr->next);
 
     for (; dirinfoptr; dirinfoptr = dirinfoptr->prev)
     {
-        // Always make sure to close to avoid leaking FDs 
+        /* Always make sure to close to avoid leaking FDs */
         close(dirinfoptr->f);
         if (dirinfoptr->next)
             free(dirinfoptr->next);
@@ -165,7 +170,7 @@ void daemonize()
         exit(EXIT_FAILURE);
 
     /* Catch, ignore and handle signals */
-    // TODO: Implement a working signal handler */
+    /* TODO: Implement a working signal handler */
     signal(SIGCHLD, SIG_IGN);
     signal(SIGHUP, SIG_IGN);
 
@@ -201,7 +206,7 @@ void setlimits()
 
 int main (int argc, const char *argv[])
 {
-    // TODO We have to ask the OS what the current limit is on open files.
+    /* TODO We have to ask the OS what the current limit is on open files. */
     int f, kq, nev;
     struct kevent change[MAX_OPEN_FILES];
     struct kevent event[MAX_OPEN_FILES];
@@ -223,7 +228,7 @@ int main (int argc, const char *argv[])
     poptContext optCon;
     char c;
 
-    // Parse command line options
+    /* Parse command line options */
     optCon = poptGetContext(NULL, argc, argv, optionsTable, 0);
     if (argc < 2)
     {
@@ -253,12 +258,12 @@ int main (int argc, const char *argv[])
     if (forkme)
         daemonize();
 
-    // Warm up kqueue
+    /* Warm up kqueue */
     kq = kqueue();
     if (kq < 0)
         perror("kqueue");
 
-    // Set default scan timers
+    /* Set default scan timers */
     clock_gettime(CLOCK_REALTIME, &time);
     timers = timer_init();
 
@@ -270,11 +275,11 @@ int main (int argc, const char *argv[])
     timer.tv_nsec = 0;
     maxtimer = timer_set(timers, NULL, &timer);
 
-    // Set system resources to ensure we have enough available FDs to work with
+    /* Set system resources to ensure we have enough available FDs to work with */
     setlimits();
 
 rescan:
-    // Scan directories and load event loop
+    /* Scan directories and load event loop */
     n=0;
     directories = dirscan(pwd);
     for (dirinfoptr = directories; dirinfoptr; dirinfoptr = dirinfoptr->next)
@@ -286,36 +291,42 @@ rescan:
     }
 
 eventloop:
-    // Loop until an unrecoverable error occurs.
-    while (1) {
+    /* Loop until an unrecoverable error occurs. */
+    while (1)
+    {
         timerptr = get_next_offset(timers, NULL, &next);
         nev = kevent(kq, change, n, event, n, &next);
-        if (nev == -1) {
-            // kevent returned an error
+        if (nev == -1)
+        {
+            /* kevent returned an error */
             perror("kevent");
         }
-        // Check to see if any timers expired
+        /* Check to see if any timers expired */
         while ((timerptr = get_expired_timer(timers, NULL)))
         {
             if (timerptr == maxtimer)
             {
-                // We've reached our max idle timer.  Reset and process change requests
+                /* We've reached our max idle timer.  Reset and process change requests */
                 timer_reset(maxtimer, NULL);
                 changes = 0;
                 system(cmdline);
             }
-            else if (timerptr == idletimer) {
-                // We've hit our idle timer without any further disk writes.  Reset and process change requests
+            else if (timerptr == idletimer)
+            {
+                /* We've hit our idle timer without any further disk writes.  Reset and process change requests */
                 timer_reset(idletimer, NULL);
-                if (changes > 0) {
+                if (changes > 0)
+                {
                     changes = 0;
                     system(cmdline);
                 }
             }
         }
-        if (nev > 0) {
-            // We have changes to process
-            for (i = 0; i < nev; i++) {
+        if (nev > 0)
+        {
+            /* We have changes to process */
+            for (i = 0; i < nev; i++)
+            {
                 dirinfoptr = searchfd(event[i].ident, directories);
 
                 /*
@@ -333,11 +344,12 @@ eventloop:
                     continue;
 
                 LOG(LOG_INFO, "%s\n", dirinfoptr->path);
-                switch(event[i].fflags) {
+                switch(event[i].fflags)
+                {
                     case NOTE_DELETE:
                         if ((strncasecmp(dirinfoptr->path, pwd, PATH_MAX)) == 0)
                         {
-                            // Our working directory just vanished
+                            /* Our working directory just vanished */
                             goto error;
                         }
                     default:
